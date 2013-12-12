@@ -139,10 +139,11 @@ public class Wiktionary {
         Matcher m = TEMPLATE_PATTERN.matcher(result);
         while(m.find()){
         	String template = m.group();
-        	Matcher om = Pattern.compile("of\\|(.+)\\}\\}").matcher(template);
+        	Matcher om = Pattern.compile("\\{\\{(en-)?(.+of)\\|([^\\|]+)(\\|.+)?\\}\\}").matcher(template);
         	if(om.find()){
-        		result = result.replaceAll("(}})|(\\{\\{(en-)?)", "").replaceAll("\\|", " ");
-        		origin = om.group(1);
+        		origin = om.group(3);
+        		String converted = om.replaceAll("$2 $3");
+        		result = result.replace(template, converted);
         	}
         	else if(Pattern.compile("definition\\|").matcher(template).find())
         		result = result.replaceAll("\\{\\{.+?definition\\|(.+?)\\}\\}", " $1");
