@@ -1,0 +1,7 @@
+bin
+lib
+.DS_Store
+.classpath
+.project
+.pydevproject
+.settings/
