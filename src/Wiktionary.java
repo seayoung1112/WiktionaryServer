@@ -32,7 +32,8 @@ public class Wiktionary {
 	    Connection connection = factory.newConnection();
 	    Channel channel = connection.createChannel();
 	    
-	    channel.queueDeclare(QUEUE_NAME, false, false, false, null);
+//	    auto delete, but not exclusive (all servers will share a same queue)
+	    channel.queueDeclare(QUEUE_NAME, false, false, true, null);
 	    channel.basicQos(1);
 
 	    QueueingConsumer consumer = new QueueingConsumer(channel);
