@@ -1,3 +1,4 @@
+package learnbyread;
 import java.io.File;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -26,7 +27,11 @@ public class Wiktionary {
 	private final static String QUEUE_NAME = "wkt_queue";
 	private static IWiktionaryEdition wkt = null;
 	public static void main(String[] args) throws Exception {
-		wkt = JWKTL.openEdition(new File("/Users/jzhao/Documents/Db"));
+		if(args.length > 1 && args[0].equals("-p")){
+			WiktionaryParser.parseToDb(args[1]);
+			return;
+		}
+		wkt = JWKTL.openEdition(new File(Config.Instance().getDbPath()));
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    Connection connection = factory.newConnection();

@@ -1,3 +1,6 @@
+db
+out
+config.yaml
 bin
 lib
 .DS_Store
