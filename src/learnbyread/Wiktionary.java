@@ -106,15 +106,35 @@ public class Wiktionary {
         	JSONObject obj = new JSONObject();
         	obj.put("part_of_speech", entry.getPartOfSpeech().toString());
         	JSONArray pronunList = new JSONArray();
-        	for(IPronunciation pronun : entry.getPronunciations()){
-        		String type = pronun.getNote();
-//        		only get RP and US pronunciation
-        		if(type.equals("RP") || type.equals("US")){
-        			JSONObject pronunObj = new JSONObject();
-        			pronunObj.put("type", type);
-        			pronunObj.put("text", pronun.getText());
-        			pronunList.add(pronunObj);
-        		}
+        	if(entry.getPronunciations() != null){
+        		boolean hasipa = false;
+	        	for(IPronunciation pronun : entry.getPronunciations()){
+	        		String type = pronun.getNote();
+//	        		System.out.println(type);
+//	        		System.out.println(pronun.getText());
+//        			only get RP UK and US pronunciation
+	        		if(type.equals("RP") || type.equals("US") || type.equals("UK") || type.length() == 0){
+	        			JSONObject pronunObj = new JSONObject();
+	        			String text = pronun.getText();
+//	        			if the type is empty string, try to figure it out
+	        			if(type.length() == 0){
+		        			if(text.startsWith("/")){
+//		        				just use the first ipa, kind of tricky 
+		        				if(!hasipa){
+		        					continue;
+		        				}
+		        				hasipa = true;
+		        				type = "IPA";
+		        			}
+		        			else{
+		        				type = "Rhymes";
+		        			}
+		        		}
+	        			pronunObj.put("type", type);
+	        			pronunObj.put("text", text);
+	        			pronunList.add(pronunObj);
+	        		}
+	        	}
         	}
         	obj.put("pronunciation", pronunList);
         	JSONArray senseList = new JSONArray();
@@ -172,13 +192,21 @@ public class Wiktionary {
         result = REFERENCES_PATTERN.matcher(result).replaceAll("");
         result = result.replaceAll("\\{\\{.+?definition\\|(.+?)\\}\\}", " $1");
 //      form-of template
-        Matcher om = Pattern.compile("\\{\\{(en-)?(.+of)\\|([^\\|]+)(\\|.+)?\\}\\}").matcher(result);
+        Matcher om = Pattern.compile("\\{\\{(en-)?([^\\}\\{]+of)\\|([^\\|]+)(\\|[^\\}]+)?\\}\\}").matcher(result);
         if(om.find()){
         	origin = om.group(3);
+            result = om.replaceAll("$2 $3");
         }
-        result = om.replaceAll("$2 $3");
 //      context template eg: (math) (computer science)
+        om = Pattern.compile("\\{\\{context\\|(.+)\\|lang=\\w+\\}\\}").matcher(result);
+        if(om.find()){
+        	String tmp = om.group(1);
+        	tmp = tmp.replaceAll("\\|_\\|", " ");
+        	tmp = tmp.replaceAll("\\|", ", ");
+        	result = om.replaceAll("\\(" + tmp + "\\)");
+        }
         result = result.replaceAll("\\{\\{context\\|(.+)\\|lang=\\w+\\}\\}", "\\($1\\)");
+        
         result = TEMPLATE_PATTERN.matcher(result).replaceAll("");
         result = HTML_PATTERN.matcher(result).replaceAll("");
         result = result.replace("’", "'");
