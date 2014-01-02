@@ -82,7 +82,7 @@ public class Wiktionary {
         for (IWiktionaryEntry entry : entries)
         {
         	JSONObject obj = new JSONObject();
-        	obj.put("part_of_speech", entry.getPartOfSpeech().toString());
+        	obj.put("speech", entry.getPartOfSpeech().toString());
         	JSONArray senseList = new JSONArray();
         	for(IWiktionarySense sense : entry.getSenses())
         	{
@@ -105,7 +105,7 @@ public class Wiktionary {
         		}
 //	        	System.out.println(sense.getGloss().getText());
 	        	String[] analyzed = analyzeAndPrettify(sense.getGloss().getText()); 
-        		s.put("content", analyzed[0]);
+        		s.put("text", analyzed[0]);
         		if(extent && analyzed[1] != null){
         			s.put("origin", lookup(analyzed[1], false));
         		}
@@ -152,9 +152,9 @@ public class Wiktionary {
         		result = result.replace(template, "");
         }
         result = HTML_PATTERN.matcher(result).replaceAll("");
-        result = result.replace("’", "'");
-        result = result.replace("�", "'");
-        result = result.replace("°", "");
+        result = result.replace("���", "'");
+        result = result.replace("锟�", "'");
+        result = result.replace("掳", "");
         result = WHITESPACE_PATTERN.matcher(result).replaceAll(" ");
         while (result.length() > 0 && "*: ".contains(result.substring(0, 1)))
                 result = result.substring(1);
