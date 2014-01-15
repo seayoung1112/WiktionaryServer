@@ -1,4 +1,8 @@
+package learnbyread;
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -13,9 +17,11 @@ import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.QueueingConsumer;
 
 import de.tudarmstadt.ukp.jwktl.JWKTL;
+import de.tudarmstadt.ukp.jwktl.api.IPronunciation;
 import de.tudarmstadt.ukp.jwktl.api.IWikiString;
 import de.tudarmstadt.ukp.jwktl.api.IWiktionaryEdition;
 import de.tudarmstadt.ukp.jwktl.api.IWiktionaryEntry;
+import de.tudarmstadt.ukp.jwktl.api.IWiktionaryPage;
 import de.tudarmstadt.ukp.jwktl.api.IWiktionaryRelation;
 import de.tudarmstadt.ukp.jwktl.api.IWiktionarySense;
 import de.tudarmstadt.ukp.jwktl.api.filter.WiktionaryEntryFilter;
@@ -26,7 +32,11 @@ public class Wiktionary {
 	private final static String QUEUE_NAME = "wkt_queue";
 	private static IWiktionaryEdition wkt = null;
 	public static void main(String[] args) throws Exception {
-		wkt = JWKTL.openEdition(new File("/Users/jzhao/Documents/Db"));
+		if(args.length > 1 && args[0].equals("-p")){
+			WiktionaryParser.parseToDb(args[1]);
+			return;
+		}
+		Wiktionary.initialize();
 		ConnectionFactory factory = new ConnectionFactory();
 	    factory.setHost("localhost");
 	    Connection connection = factory.newConnection();
@@ -58,22 +68,29 @@ public class Wiktionary {
 	    }
 	}
 	
+	public static void initialize() throws FileNotFoundException{
+		wkt = JWKTL.openEdition(new File(Config.Instance().getDbPath()));
+	}
 	
-	protected static JSONObject lookup(String word)
+	public static void clear() {
+		if(wkt != null)
+			wkt.close();
+	}
+	
+	public static JSONObject lookup(String word)
 	{
 		return lookup(word, true);
 	}
 //	if extent is true, will try to find the origin of this word (for plural, tense, etc) and add it.
 	@SuppressWarnings("unchecked")
-	protected static JSONObject lookup(String word, boolean extent)
+	public static JSONObject lookup(String word, boolean extent)
 	{
         System.out.println(" [.] looking up " + word);
-        // look up in the dictionary
+// 		look up in the dictionary
         WiktionaryEntryFilter filter = new WiktionaryEntryFilter();
         filter.setAllowedWordLanguages(Language.ENGLISH);
-//        filter.setAllowedPartsOfSpeech(PartOfSpeech.ADJECTIVE);
         List<IWiktionaryEntry> entries = wkt.getEntriesForWord(word, filter);
-//        try lower case if on result found
+//      try lower case if on result found
         if(entries.size() == 0)
         	entries = wkt.getEntriesForWord(word.toLowerCase(), filter);
         JSONObject res = new JSONObject();
@@ -83,6 +100,38 @@ public class Wiktionary {
         {
         	JSONObject obj = new JSONObject();
         	obj.put("speech", entry.getPartOfSpeech().toString());
+        	JSONArray pronunList = new JSONArray();
+        	if(entry.getPronunciations() != null){
+        		boolean hasipa = false;
+	        	for(IPronunciation pronun : entry.getPronunciations()){
+	        		String type = pronun.getNote();
+//	        		System.out.println(type);
+//	        		System.out.println(pronun.getText());
+//        			only get RP UK and US pronunciation
+	        		if(type.equals("RP") || type.equals("US") || type.equals("UK") || type.length() == 0){
+	        			JSONObject pronunObj = new JSONObject();
+	        			String text = pronun.getText();
+//	        			if the type is empty string, try to figure it out
+	        			if(type.length() == 0){
+		        			if(text.startsWith("/")){
+//		        				just use the first ipa, kind of tricky 
+		        				if(!hasipa){
+		        					continue;
+		        				}
+		        				hasipa = true;
+		        				type = "IPA";
+		        			}
+		        			else{
+		        				type = "Rhymes";
+		        			}
+		        		}
+	        			pronunObj.put("type", type);
+	        			pronunObj.put("text", text);
+	        			pronunList.add(pronunObj);
+	        		}
+	        	}
+        	}
+        	obj.put("pronunciation", pronunList);
         	JSONArray senseList = new JSONArray();
         	for(IWiktionarySense sense : entry.getSenses())
         	{
@@ -103,7 +152,6 @@ public class Wiktionary {
 		        		referenceList.add(ref.toString());
 		        	}
         		}
-//	        	System.out.println(sense.getGloss().getText());
 	        	String[] analyzed = analyzeAndPrettify(sense.getGloss().getText()); 
         		s.put("text", analyzed[0]);
         		if(extent && analyzed[1] != null){
@@ -137,24 +185,28 @@ public class Wiktionary {
         result = QUOTES_PATTERN.matcher(result).replaceAll("");
         result = WIKILINK_PATTERN.matcher(result).replaceAll("$2");
         result = REFERENCES_PATTERN.matcher(result).replaceAll("");
-        Matcher m = TEMPLATE_PATTERN.matcher(result);
-        while(m.find()){
-        	String template = m.group();
-        	Matcher om = Pattern.compile("\\{\\{(en-)?(.+of)\\|([^\\|]+)(\\|.+)?\\}\\}").matcher(template);
-        	if(om.find()){
-        		origin = om.group(3);
-        		String converted = om.replaceAll("$2 $3");
-        		result = result.replace(template, converted);
-        	}
-        	else if(Pattern.compile("definition\\|").matcher(template).find())
-        		result = result.replaceAll("\\{\\{.+?definition\\|(.+?)\\}\\}", " $1");
-        	else
-        		result = result.replace(template, "");
+        result = result.replaceAll("\\{\\{.+?definition\\|(.+?)\\}\\}", " $1");
+//      form-of template
+        Matcher om = Pattern.compile("\\{\\{(en-)?([^\\}\\{]+of)\\|([^\\|]+)(\\|[^\\}]+)?\\}\\}").matcher(result);
+        if(om.find()){
+        	origin = om.group(3);
+            result = om.replaceAll("$2 $3");
         }
+//      context template eg: (math) (computer science)
+        om = Pattern.compile("\\{\\{context\\|(.+)\\|lang=\\w+\\}\\}").matcher(result);
+        if(om.find()){
+        	String tmp = om.group(1);
+        	tmp = tmp.replaceAll("\\|_\\|", " ");
+        	tmp = tmp.replaceAll("\\|", ", ");
+        	result = om.replaceAll("\\(" + tmp + "\\)");
+        }
+        result = result.replaceAll("\\{\\{context\\|(.+)\\|lang=\\w+\\}\\}", "\\($1\\)");
+        
+        result = TEMPLATE_PATTERN.matcher(result).replaceAll("");
         result = HTML_PATTERN.matcher(result).replaceAll("");
-        result = result.replace("���", "'");
-        result = result.replace("锟�", "'");
-        result = result.replace("掳", "");
+        result = result.replace("’", "'");
+        result = result.replace("�", "'");
+        result = result.replace("°", "");
         result = WHITESPACE_PATTERN.matcher(result).replaceAll(" ");
         while (result.length() > 0 && "*: ".contains(result.substring(0, 1)))
                 result = result.substring(1);
